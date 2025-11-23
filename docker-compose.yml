@@ -1,12 +1,12 @@
 services:
   rabbitmq:
-    image: rococo_sample_rabbitmq
-    container_name: rococo_sample_rabbitmq
+    image: jumpshot_rabbitmq
+    container_name: jumpshot_rabbitmq
     build:
       context: ./services/rabbitmq
       dockerfile: Dockerfile
     volumes:
-      - rococo-sample-rabbitmq-data:/var/lib/rabbitmq
+      - jumpshot-rabbitmq-data:/var/lib/rabbitmq
     networks:
         - backnet
     env_file:
@@ -22,9 +22,9 @@ services:
         retries: 10
 
   postgres:
-    image: rococo_sample_postgres
+    image: jumpshot_postgres
     platform: linux/amd64
-    container_name: rococo_sample_postgres
+    container_name: jumpshot_postgres
     build:
       context: ./services/postgres
       dockerfile: Dockerfile
@@ -35,7 +35,7 @@ services:
       - .env.secrets
       - ${APP_ENV}.env
     volumes:
-        - rococo-sample-postgres-data:/var/lib/postgresql/data
+        - jumpshot-postgres-data:/var/lib/postgresql/data
     ports:
         - "5432:5432"
     healthcheck:
@@ -48,8 +48,8 @@ services:
 
   api:
     restart: always
-    image: rococo_sample_api
-    container_name: rococo_sample_api
+    image: jumpshot_api
+    container_name: jumpshot_api
     build:
         context: .
         dockerfile: ./flask/Dockerfile
@@ -71,7 +71,8 @@ services:
 
   email_transmitter:
     image: ecorrouge/email-transmitter:latest
-    container_name: rococo_sample_email_transmitter
+    platform: linux/amd64
+    container_name: jumpshot_email_transmitter
     restart: unless-stopped
     networks:
       - backnet
@@ -91,10 +92,10 @@ services:
 
 
 volumes:
-  rococo-sample-postgres-data:
-    name: rococo-sample-postgres-data
-  rococo-sample-rabbitmq-data:
-    name: rococo-sample-rabbitmq-data
+  jumpshot-postgres-data:
+    name: jumpshot-postgres-data
+  jumpshot-rabbitmq-data:
+    name: jumpshot-rabbitmq-data
     driver: local
 
 networks:

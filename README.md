@@ -1,2 +1,2 @@
-# rococo-sample-backend
-A rococo-based backend for web apps
+# Jumpshot Backend
+A rococo-based backend for Jumpshot application

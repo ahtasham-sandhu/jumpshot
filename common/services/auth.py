@@ -88,24 +88,33 @@ class AuthService:
         )
         return token
 
-    def prepare_password_reset_url(self, login_method: LoginMethod, email: str):
+    def prepare_verification_url(self, login_method: LoginMethod, email: str):
+        """Generate account verification URL for welcome email (signup flow)."""
         token = self.generate_reset_password_token(login_method, email)
         uid = urlsafe_base64_encode(force_bytes(login_method.entity_id))
-        password_reset_url = self.config.VUE_APP_URI + "/set-password/" + token + "/" + uid
+        verification_url = self.config.VUE_APP_URI + "/set-password/" + token + "/" + uid
+        return verification_url
+
+    def prepare_password_reset_url(self, login_method: LoginMethod, email: str):
+        """Generate password reset URL for forgot password flow."""
+        token = self.generate_reset_password_token(login_method, email)
+        uid = urlsafe_base64_encode(force_bytes(login_method.entity_id))
+        password_reset_url = self.config.VUE_APP_URI + "/reset-password/" + token + "/" + uid
         return password_reset_url
 
     def send_welcome_email(self, login_method: LoginMethod, person: Person, email: str):
-        if confirmation_link := self.prepare_password_reset_url(login_method, email):
+        """Send welcome email with account verification link (signup flow)."""
+        if verification_link := self.prepare_verification_url(login_method, email):
             message = {
                 "event": "WELCOME_EMAIL",
                 "data": {
-                    "confirmation_link": confirmation_link,
+                    "confirmation_link": verification_link,
                     "recipient_name": f"{person.first_name} {person.last_name}".strip(),
                 },
                 "to_emails": [email],
             }
-            logger.info("confirmation_link")
-            logger.info(confirmation_link)
+            logger.info("verification_link")
+            logger.info(verification_link)
             self.message_sender.send_message(self.EMAIL_TRANSMITTER_QUEUE_NAME, message)
 
     def login_user_by_email_password(self, email: str, password: str):
@@ -280,6 +289,47 @@ class AuthService:
             }
             self.message_sender.send_message(self.EMAIL_TRANSMITTER_QUEUE_NAME, message)
 
+    def verify_account_and_set_password(self, token: str, uidb64: str, password: str):
+        """
+        Verify account and set password after signup using the welcome email link.
+        This is called when a user clicks the verification link and sets their password.
+        """
+        # Create new login method temporarily to validate and generate hashed password in its `password` field.
+        new_login_method = LoginMethod(
+            method_type=LoginMethodType.EMAIL_PASSWORD,
+            raw_password=password
+        )
+
+        login_method_id = force_str(urlsafe_base64_decode(uidb64))
+        login_method = self.login_method_service.get_login_method_by_id(login_method_id)
+
+        if not login_method:
+            raise APIException("Invalid verification URL.")
+
+        parsed_token = self.parse_reset_password_token(token, login_method)
+
+        if not parsed_token:
+            raise APIException("Invalid or expired verification token.")
+
+        email_obj = self.email_service.get_email_by_id(parsed_token['email_id'])
+        if not email_obj:
+            raise APIException("Email not found.")
+
+        person_obj = self.person_service.get_person_by_id(parsed_token['person_id'])
+        if not person_obj:
+            raise APIException("Person with email not found.")
+
+        # Update password
+        login_method = self.login_method_service.update_password(login_method, new_login_method.password)
+
+        # Verify email
+        email_obj = self.email_service.verify_email(email_obj)
+
+        # Generate access token
+        access_token, expiry = generate_access_token(login_method, person=person_obj, email=email_obj)
+
+        return access_token, expiry, person_obj
+
     def reset_user_password(self, token: str, uidb64: str, password: str):
         # Create new login method temporarily to validate and generate hashed password in its `password` field.`
         new_login_method = LoginMethod(
@@ -292,16 +342,16 @@ class AuthService:
 
         if not login_method:
             raise APIException("Invalid password reset URL.")
-        
+
         parsed_token = self.parse_reset_password_token(token, login_method)
 
         if not parsed_token:
             raise APIException("Invalid reset password token.")
-        
+
         email_obj = self.email_service.get_email_by_id(parsed_token['email_id'])
         if not email_obj:
             raise APIException("Email not found.")
-        
+
         person_obj = self.person_service.get_person_by_id(parsed_token['person_id'])
         if not person_obj:
             raise APIException("Person with email not found.")

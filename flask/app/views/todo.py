@@ -73,29 +73,31 @@ class TodoItem(Resource):
     @login_required()
     def put(self, person, todo_id):
         parsed_body = parse_request_body(request, ['title', 'is_completed'], default_value=None)
-        
+
         # At least one field should be provided
         if not parsed_body.get('title') and parsed_body.get('is_completed') is None:
             return get_failure_response(
                 message="At least one field (title or is_completed) must be provided.",
                 status_code=400
             )
-        
+
         todo_service = TodoService(config)
+
+        # Verify ownership before update
         todo = todo_service.get_todo_by_id(todo_id)
-        
+
         if not todo or todo.person_id != person.entity_id:
             return get_failure_response(message="Todo not found or not authorized to access this todo")
-        
-        # Update fields if provided
-        if parsed_body.get('title'):
-            todo.title = parsed_body['title']
-        
-        if parsed_body.get('is_completed') is not None:
-            todo.is_completed = parsed_body['is_completed']
-        
-        updated_todo = todo_service.save_todo(todo)
-        
+
+        updated_todo = todo_service.update_todo(
+            todo_id=todo_id,
+            title=parsed_body.get('title'),
+            is_completed=parsed_body.get('is_completed')
+        )
+
+        if not updated_todo:
+            return get_failure_response(message="Failed to update todo")
+
         return get_success_response(
             message="Todo updated successfully.",
             todo=updated_todo.as_dict()
@@ -113,4 +115,49 @@ class TodoItem(Resource):
         todo_service.delete_todo(todo)
         
         return get_success_response(message="Todo deleted successfully.")
+
+
+@todo_api.route('/bulk')
+class TodoBulk(Resource):
+
+    @login_required()
+    def delete(self, person):
+        """Delete all completed todos for the authenticated user."""
+        todo_service = TodoService(config)
+        deleted_count = todo_service.delete_completed_todos(person.entity_id)
+
+        return get_success_response(
+            message=f"Successfully deleted {deleted_count} completed todo(s).",
+            deleted_count=deleted_count
+        )
+
+
+@todo_api.route('/mark-all-completed')
+class TodoMarkAllCompleted(Resource):
+
+    @login_required()
+    def patch(self, person):
+        """Mark all todos as completed for the authenticated user."""
+        todo_service = TodoService(config)
+        updated_count = todo_service.mark_all_todos_completed(person.entity_id)
+
+        return get_success_response(
+            message=f"Successfully marked {updated_count} todo(s) as completed.",
+            updated_count=updated_count
+        )
+
+
+@todo_api.route('/mark-all-pending')
+class TodoMarkAllPending(Resource):
+
+    @login_required()
+    def patch(self, person):
+        """Mark all todos as pending (incomplete) for the authenticated user."""
+        todo_service = TodoService(config)
+        updated_count = todo_service.mark_all_todos_pending(person.entity_id)
+
+        return get_success_response(
+            message=f"Successfully marked {updated_count} todo(s) as pending.",
+            updated_count=updated_count
+        )
 

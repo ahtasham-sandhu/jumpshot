@@ -66,6 +66,37 @@ class Login(Resource):
         return get_success_response(person=person.as_dict(), access_token=access_token, expiry=expiry)
 
 
+@auth_api.route(
+    '/set-password/<string:token>/<string:uidb64>',
+    doc=dict(description="Verify account and set password using welcome email link")
+)
+class SetPassword(Resource):
+    @auth_api.expect(
+        {'type': 'object', 'properties': {
+            'password': {'type': 'string'}
+        }}
+    )
+    def post(self, token, uidb64):
+        """
+        Verify account and set password after signup.
+        This endpoint is called from the welcome email link.
+        """
+        parsed_body = parse_request_body(request, ['password'])
+        validate_required_fields(parsed_body)
+
+        auth_service = AuthService(config)
+        access_token, expiry, person_obj = auth_service.verify_account_and_set_password(
+            token, uidb64, parsed_body.get('password')
+        )
+
+        return get_success_response(
+            message="Your account has been verified and password has been set!",
+            access_token=access_token,
+            expiry=expiry,
+            person=person_obj.as_dict()
+        )
+
+
 @auth_api.route('/forgot_password', doc=dict(description="Send reset password link"))
 class ForgotPassword(Resource):
     @auth_api.expect(
